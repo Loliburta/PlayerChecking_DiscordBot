@@ -1,16 +1,30 @@
 require("dotenv").config();
-const Gamedig = require("gamedig");
 const { Client } = require("discord.js");
 const client = new Client();
+const getServerData = require("./utils/getServerData");
+// Commands
+const serverInfo = require("./utils/commands/serverInfo");
+
+// Ip of your server
 const serverHost = process.env.SERVER_HOST;
+// Id of the server's game, you can find it here: https://www.npmjs.com/package/gamedig
+const gameDigTypeID = process.env.GAMEDIG_TYPE_ID;
+// Discord bot token
 const discordBotToken = process.env.DISCORDJS_BOT_TOKEN;
+// Channel where your bot should send messages
+const channelName = process.env.CHANNEL;
+// Bot will notify you when there are more players on the server than that number
+const playerNumber = 2;
 
 const connect = async () => {
   await client.login(discordBotToken);
   client.on("ready", () => {
     console.log(`${client.user.username} has logged in`);
   });
-  let serverData = await checkPlayers();
+  let serverData = await getServerData(gameDigTypeID, serverHost);
+  setInterval(() => {
+    checkPlayers();
+  }, 120 * 1000);
   if (!serverData) {
     return;
   }
@@ -25,32 +39,31 @@ const connect = async () => {
         .trim()
         .substring(prefix.length)
         .split(/\s+/);
-      console.log(commandName, args);
-
-      if (commandName.toLowerCase() === "serverinfo") {
-        serverData = await checkPlayers();
-        if (!serverData) {
-          return;
-        }
-        console.log(serverData.raw.numplayers);
-        message.channel.send(
-          `${serverData.name} has ${serverData.raw.numplayers} / ${serverData.maxplayers} players online`
-        );
+      serverData = await getServerData(gameDigTypeID, serverHost);
+      if (!serverData) {
+        return;
+      }
+      switch (commandName.toLowerCase()) {
+        case "serverinfo":
+          serverInfo(message, serverData);
+          break;
       }
     }
   });
 };
+
 const checkPlayers = async () => {
-  try {
-    const serverData = await Gamedig.query({
-      type: "drakan",
-      host: serverHost,
-    });
-    console.log(serverData);
-    return serverData;
-  } catch (err) {
-    console.log("Server is offline");
-    return null;
+  const serverData = await getServerData(gameDigTypeID, serverHost);
+  if (!serverData) {
+    return;
+  }
+  if (serverData?.raw?.numplayers > playerNumber) {
+    const channel = client.channels.cache.find(
+      (channel) => channel.name === channelName
+    );
+    channel.send(
+      `${serverData.name} has ${serverData.raw.numplayers} / ${serverData.maxplayers} players online now`
+    );
   }
 };
 
